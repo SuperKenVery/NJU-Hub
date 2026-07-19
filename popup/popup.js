@@ -56,7 +56,7 @@ function updateGreeting() {
     else timeGreeting = "晚上好";
 
     chrome.storage.local.get(['common-name', 'student_id'], (res) => {
-        const displayName = res['common-name'] || res['student_id'] || "指挥官";
+        const displayName = res['common-name'] || res['student_id'] || "NJUer";
         greetingText.innerText = `${timeGreeting}，${displayName}`;
     });
 
@@ -69,13 +69,14 @@ function updateGreeting() {
 function loadDashboardData() {
     const keys = [
         'toggle-login',
+        'toggle-spoc-redirect',
         'toggle-schedule',
         'toggle-eval',
         'toggle-lms',
         'toggle-seec-workpanel'
     ];
     chrome.storage.local.get(keys, (data) => {
-        ['toggle-login', 'toggle-schedule', 'toggle-eval', 'toggle-lms', 'toggle-seec-workpanel'].forEach((id) => {
+        ['toggle-login', 'toggle-spoc-redirect', 'toggle-schedule', 'toggle-eval', 'toggle-lms', 'toggle-seec-workpanel'].forEach((id) => {
             const el = document.getElementById(id);
             if (!el) return;
             el.checked = data[id] !== false;
@@ -99,6 +100,11 @@ function bindEvents() {
     // GPA quick access
     document.getElementById('btn-gpa').onclick = () => {
         chrome.tabs.create({ url: 'http://elite.nju.edu.cn/exchangesystem/' });
+    };
+
+    // PE score quick access
+    document.getElementById('btn-pe-score').onclick = () => {
+        chrome.tabs.create({ url: 'https://ggtypt.nju.edu.cn/ggtypt/home' });
     };
 
     // Webportal quick access

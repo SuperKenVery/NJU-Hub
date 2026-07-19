@@ -9,94 +9,163 @@ function initCourseModule() {
 
     const dmList = document.getElementById('dm-list');
 
-    // Data Manager 悬浮评价原文 tooltip
-    let dmTooltip = null;
-    function ensureDmTooltip() {
-        if (dmTooltip) return;
-        dmTooltip = document.createElement('div');
-        dmTooltip.id = 'dm-tooltip';
-        dmTooltip.style.cssText = 'position:fixed;z-index:99999;width:380px;max-height:420px;overflow-y:auto;background:var(--md-sys-color-surface-container-lowest);border:1px solid var(--md-sys-color-outline-variant);border-radius:14px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.18);opacity:0;pointer-events:none;transform:translateY(4px);transition:opacity 0.18s,transform 0.18s;';
-        document.body.appendChild(dmTooltip);
+    function getReviewCount(data) {
+        if (!data) return 0;
+        if (Array.isArray(data)) return data.length;
+        if (typeof data === 'object') {
+            let count = 0;
+            for (const revs of Object.values(data)) {
+                if (Array.isArray(revs)) count += revs.length;
+            }
+            return count;
+        }
+        return 0;
     }
 
-    function showDmTooltip(anchor, key, comments) {
-        ensureDmTooltip();
-        if (!comments || comments.length === 0) return;
-        let html = `<div style="font-weight:800;font-size:13px;color:var(--md-sys-color-primary);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--md-sys-color-outline-variant);">📋 ${key.replace('#',' - ')} (${comments.length}条评价)</div>`;
-        comments.forEach((c, i) => {
-            const safe = String(c).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
-            html += `<div style="font-size:12px;color:var(--md-sys-color-on-surface);margin-bottom:8px;padding:8px 10px;background:var(--md-sys-color-surface-container-low);border-radius:8px;border-left:3px solid var(--md-sys-color-primary);line-height:1.6;">${safe}</div>`;
-        });
-        dmTooltip.innerHTML = html;
-        const r = anchor.getBoundingClientRect();
-        dmTooltip.style.left = Math.min(r.right + 4, window.innerWidth - 400) + 'px';
-        dmTooltip.style.top = Math.min(r.top, window.innerHeight - 440) + 'px';
-        dmTooltip.style.opacity = '1';
-        dmTooltip.style.transform = 'translateY(0)';
-        dmTooltip.style.pointerEvents = 'auto';
+    const srcLabels = {
+        'nju_course_ratings': '📖 鼓励你学哪门课',
+        '2020': '🏷️ 2020 红黑榜', '2021': '🏷️ 2021 南小宝',
+        '2022': '🏷️ 2022 红黑榜', '2023': '🏷️ 2023 红黑榜',
+        '2024冬': '🏷️ 2024冬 红黑榜', '2024春': '🏷️ 2024春 红黑榜',
+        '2025春': '🏷️ 2025春 红黑榜'
+    };
+
+    function buildReviewHTML(key, comments) {
+        if (!comments) return '';
+        let html = '';
+        let totalCount = 0;
+
+        if (Array.isArray(comments)) {
+            totalCount = comments.length;
+            if (totalCount === 0) return '';
+            html = `<div style="font-weight:800;font-size:13px;color:var(--md-sys-color-primary);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--md-sys-color-outline-variant);">📋 ${key.replace('#',' - ')} (${totalCount}条评价)</div>`;
+            comments.forEach((c) => {
+                const safe = String(c).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+                html += `<div style="font-size:12px;color:var(--md-sys-color-on-surface);margin-bottom:6px;padding:6px 8px;background:var(--md-sys-color-surface-container-low);border-radius:6px;border-left:3px solid var(--md-sys-color-primary);line-height:1.6;">${safe}</div>`;
+            });
+        } else if (typeof comments === 'object') {
+            for (const [src, revs] of Object.entries(comments)) {
+                if (!revs || !Array.isArray(revs) || revs.length === 0) continue;
+                totalCount += revs.length;
+            }
+            if (totalCount === 0) return '';
+            html = `<div style="font-weight:800;font-size:13px;color:var(--md-sys-color-primary);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--md-sys-color-outline-variant);">📋 ${key.replace('#',' - ')} (${totalCount}条评价)</div>`;
+            for (const [src, revs] of Object.entries(comments)) {
+                if (!revs || !Array.isArray(revs) || revs.length === 0) continue;
+                const label = srcLabels[src] || `📂 ${src}`;
+                html += `<div style="font-weight:700;color:var(--md-sys-color-on-surface-variant);margin:8px 0 4px;font-size:13px;">${label} (${revs.length}条)</div>`;
+                revs.forEach((c) => {
+                    const safe = String(c).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+                    html += `<div style="font-size:12px;color:var(--md-sys-color-on-surface);margin-bottom:6px;padding:6px 8px;background:var(--md-sys-color-surface-container-low);border-radius:6px;border-left:3px solid var(--md-sys-color-primary);line-height:1.6;">${safe}</div>`;
+                });
+            }
+        }
+        return html || '';
     }
 
-    function hideDmTooltip() {
-        if (!dmTooltip) return;
-        dmTooltip.style.opacity = '0';
-        dmTooltip.style.transform = 'translateY(4px)';
-        dmTooltip.style.pointerEvents = 'none';
-    }
+    async function renderDataManager() {
+        // 首次打开：若 NJU_DB 为空，从内置 merged_ratings.json 初始化
+        const initData = await chrome.storage.local.get(['NJU_DB']);
+        if (!initData.NJU_DB || Object.keys(initData.NJU_DB).length === 0) {
+            try {
+                const url = chrome.runtime.getURL('data/merged_ratings.json');
+                const resp = await fetch(url);
+                if (resp.ok) {
+                    const builtin = await resp.json();
+                    if (builtin && Object.keys(builtin).length > 0) {
+                        await chrome.storage.local.set({ NJU_DB: builtin });
+                    }
+                }
+            } catch (e) {
+                console.warn('[NJU-Hub] 内置评价库加载失败:', e);
+            }
+        }
 
-    ensureDmTooltip();
-    dmTooltip.addEventListener('mouseenter', () => { if (dmTooltip._timer) clearTimeout(dmTooltip._timer); });
-    dmTooltip.addEventListener('mouseleave', hideDmTooltip);
-
-    function renderDataManager() {
         chrome.storage.local.get(['NJU_DB', 'NJU_AI_CACHE'], (data) => {
             const db = data.NJU_DB || {};
             const ai = data.NJU_AI_CACHE || {};
-            const allKeys = new Set([...Object.keys(db), ...Object.keys(ai)]);
 
-            if (allKeys.size === 0) {
-                dmList.innerHTML = '<div class="dm-empty">暂无任何本地评价库或 AI 分析缓存。</div>';
+            // 跳过仅有 AI 缓存但无原始评价的条目（孤岛数据）
+            const keysToShow = Object.keys(db).filter(k => getReviewCount(db[k]) > 0);
+
+            // 顺便清理孤岛 AI 缓存
+            const orphanAiKeys = Object.keys(ai).filter(k => !db[k] || getReviewCount(db[k]) === 0);
+            if (orphanAiKeys.length > 0) {
+                orphanAiKeys.forEach(k => delete ai[k]);
+                chrome.storage.local.set({ 'NJU_AI_CACHE': ai });
+            }
+
+            if (keysToShow.length === 0) {
+                dmList.innerHTML = '<div class="dm-empty">暂无评价数据。请点击"同步评价库"获取云端数据。</div>';
                 return;
             }
 
             dmList.innerHTML = '';
 
-            Array.from(allKeys).sort().forEach((key, index) => {
-                const hasDb = !!db[key];
+            keysToShow.sort().forEach((key, index) => {
+                const reviewCount = getReviewCount(db[key]);
                 const hasAi = !!ai[key];
-
-                const dbTag = hasDb ? `<span class="dm-tag db">评价: ${db[key].length}条</span>` : '';
-                let aiTag = '';
-                if (hasAi) {
-                    const score = ai[key]['综合评分'] || '?';
-                    aiTag = `<span class="dm-tag ai">AI: ${score}分</span>`;
-                }
-
                 const displayTitle = key.replace('#', ' - ');
 
                 const item = document.createElement('div');
                 item.className = 'dm-item';
                 item.style.animationDelay = (index * 30) + 'ms';
-                item.style.cursor = hasDb ? 'pointer' : 'default';
                 item.innerHTML = `
-                    <label>
+                    <label class="dm-item-label">
                         <input type="checkbox" class="dm-check" value="${key}">
-                        <span>${displayTitle}</span>
+                        <span class="dm-item-title">${displayTitle}</span>
                     </label>
-                    <div class="dm-tags">
-                        ${dbTag}
-                        ${aiTag}
+                    <div class="dm-item-right">
+                        <span class="dm-tag db">${reviewCount}条评价</span>
+                        ${hasAi ? `<span class="dm-tag ai">AI: ${ai[key]['综合评分'] || '?'}分</span>` : ''}
+                        <span class="dm-expand-hint">▼</span>
                     </div>
                 `;
 
-                if (hasDb) {
-                    item.addEventListener('mouseenter', () => {
-                        if (dmTooltip._timer) clearTimeout(dmTooltip._timer);
-                        showDmTooltip(item, key, db[key]);
+                // 点击展开评价（checkbox 不触发）
+                const expandHint = item.querySelector('.dm-expand-hint');
+                item.addEventListener('click', (e) => {
+                    if (e.target.tagName === 'INPUT') return;
+                    // 收起其他已展开的
+                    const allExpanded = dmList.querySelectorAll('.dm-item.expanded');
+                    allExpanded.forEach(el => {
+                        if (el !== item) {
+                            el.classList.remove('expanded');
+                            const h = el.querySelector('.dm-expand-hint');
+                            if (h) h.textContent = '▼';
+                            const panel = el.nextElementSibling;
+                            if (panel && panel.classList.contains('dm-expand-panel')) panel.remove();
+                        }
                     });
-                    item.addEventListener('mouseleave', () => {
-                        dmTooltip._timer = setTimeout(hideDmTooltip, 350);
-                    });
-                }
+                    // 切换当前
+                    if (item.classList.contains('expanded')) {
+                        item.classList.remove('expanded');
+                        if (expandHint) expandHint.textContent = '▼';
+                        const panel = item.nextElementSibling;
+                        if (panel && panel.classList.contains('dm-expand-panel')) panel.remove();
+                    } else {
+                        item.classList.add('expanded');
+                        if (expandHint) expandHint.textContent = '▲';
+                        const panel = document.createElement('div');
+                        panel.className = 'dm-expand-panel';
+                        // 构建评价 + AI 分析
+                        let panelHTML = buildReviewHTML(key, db[key]);
+                        if (hasAi) {
+                            const a = ai[key];
+                            panelHTML += `
+                                <div style="margin-top:14px;padding-top:12px;border-top:2px solid var(--md-sys-color-outline-variant);">
+                                    <div style="font-weight:800;font-size:13px;color:#660874;margin-bottom:8px;">🤖 AI 深度解析</div>
+                                    <div style="font-size:12px;color:var(--md-sys-color-on-surface);margin-bottom:4px;">● <b>给分:</b> ${a['给分'] || '—'}</div>
+                                    <div style="font-size:12px;color:var(--md-sys-color-on-surface);margin-bottom:4px;">● <b>任务:</b> ${a['事少'] || '—'}</div>
+                                    <div style="font-size:12px;color:var(--md-sys-color-on-surface);margin-bottom:4px;">● <b>签到:</b> ${a['签到'] || '—'}</div>
+                                    <div style="font-size:12px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--md-sys-color-outline-variant);color:#1b5e20;font-weight:bold;">结论: ${a['总结'] || '—'}</div>
+                                    <div style="font-size:11px;margin-top:8px;padding-top:6px;border-top:1px solid var(--md-sys-color-outline-variant);color:var(--md-sys-color-on-surface-variant);text-align:center;">⚠️ AI 生成可能有误，注意核实。如需核实请看原评价。</div>
+                                </div>`;
+                        }
+                        panel.innerHTML = panelHTML;
+                        item.after(panel);
+                    }
+                });
 
                 dmList.appendChild(item);
             });
@@ -229,6 +298,13 @@ function initCourseModule() {
         openModal();
     };
 
+    const importBtn = document.getElementById('btn-import-schedule');
+    if (importBtn) {
+        importBtn.onclick = () => {
+            chrome.tabs.create({ url: 'https://ehallapp.nju.edu.cn/jwapp/sys/wdkb/*default/index.do#/xskcb' });
+        };
+    }
+
     const viewBtn = document.getElementById('btn-view-schedule');
     if (viewBtn) viewBtn.onclick = openSchedule;
 
@@ -265,53 +341,13 @@ function initCourseModule() {
     const openEhallBtn = document.getElementById('schedule-open-ehall');
     if (openEhallBtn) {
         openEhallBtn.onclick = () => {
-            chrome.tabs.create({ url: 'https://ehall.nju.edu.cn/ywtb-portal/official/index.html#/home/official_home' });
+            chrome.tabs.create({ url: 'https://ehallapp.nju.edu.cn/jwapp/sys/wdkb/*default/index.do#/xskcb' });
         };
     }
 
     // ============================================================
-    // 10. Course Rating Import/Export/Clear
+    // 10. Course Rating Export
     // ============================================================
-
-    const dbFile = document.getElementById('course-db-file');
-    const btnImport = document.getElementById('course-db-import');
-    if (btnImport && dbFile) btnImport.onclick = () => dbFile.click();
-
-    if (dbFile) {
-        dbFile.onchange = (e) => {
-            const f = e.target.files && e.target.files[0];
-            if (!f) return;
-            const r = new FileReader();
-            r.onload = async (ev) => {
-                try {
-                    const bytes = new Uint8Array(ev.target.result);
-                    const wb = XLSX.read(bytes, { type: 'array' });
-                    const ws = wb.Sheets[wb.SheetNames[0]];
-                    const rows = XLSX.utils.sheet_to_json(ws);
-
-                    const db = {};
-                    rows.forEach((row) => {
-                        const c = row['课程'] || row['课程名称'];
-                        const t = row['授课老师'] || row['任课教师'];
-                        const comms = [];
-                        Object.keys(row).forEach((k) => {
-                            if (String(k).includes('评价') && row[k]) comms.push(row[k]);
-                        });
-                        if (c && t && comms.length) db[`${c}#${t}`] = comms;
-                    });
-
-                    await chrome.storage.local.set({ NJU_DB: db });
-                    renderDataManager();
-                    NjuModal.alert('导入', '导入完成');
-                } catch (err) {
-                    NjuModal.alert('导入失败', '文件格式不正确，请检查文件内容。');
-                } finally {
-                    dbFile.value = '';
-                }
-            };
-            r.readAsArrayBuffer(f);
-        };
-    }
 
     const btnExport = document.getElementById('course-db-export');
     if (btnExport) {
@@ -327,31 +363,16 @@ function initCourseModule() {
         };
     }
 
-    const btnClear = document.getElementById('course-db-clear');
-    if (btnClear) {
-        btnClear.onclick = async () => {
-            NjuModal.confirm({
-                title: '清空数据',
-                message: '确定要清空所有评价记录与 AI 缓存吗？此操作不可撤销。',
-                danger: true,
-                onConfirm: async () => {
-                    await chrome.storage.local.remove(['NJU_DB', 'NJU_AI_CACHE']);
-                    renderDataManager();
-                }
-            });
-        };
-    }
-
     // ============================================================
-    // 9.5. SeaTable 云端同步
+    // 11. Cloud Sync (GitHub + SeaTable)
     // ============================================================
 
-    const seatableStatus = document.getElementById('seatable-status');
+    const syncStatus = document.getElementById('course-sync-status');
 
-    function setSeatableStatus(msg, isError = false) {
-        if (!seatableStatus) return;
-        seatableStatus.textContent = msg;
-        seatableStatus.style.color = isError ? '#c62828' : '';
+    function setSyncStatus(msg, isError = false) {
+        if (!syncStatus) return;
+        syncStatus.textContent = msg;
+        syncStatus.style.color = isError ? '#c62828' : '';
     }
 
     function seatableFetch(url, token, method = 'GET', body = null) {
@@ -446,13 +467,9 @@ function initCourseModule() {
             const fullComment = parts.join(' ');
 
             const dbKey = `${courseName}#${teacher}`;
-            if (db[dbKey]) {
-                const existing = new Set(db[dbKey]);
-                existing.add(fullComment);
-                db[dbKey] = Array.from(existing);
-            } else {
-                db[dbKey] = [fullComment];
-            }
+            if (!db[dbKey]) db[dbKey] = { 'nju_course_ratings': [] };
+            const arr = db[dbKey]['nju_course_ratings'];
+            if (!arr.includes(fullComment)) arr.push(fullComment);
         });
         return db;
     }
@@ -462,13 +479,13 @@ function initCourseModule() {
         if (!apiToken) throw new Error('API Token 未配置');
         if (!tableName) throw new Error('表名未配置');
 
-        setSeatableStatus('正在获取 Base Token...');
+        setSyncStatus('正在获取 Base Token...');
         const { accessToken, dtableUuid, dtableServer } = await seatableGetBaseToken(apiToken, serverUrl);
 
-        setSeatableStatus('正在获取表结构...');
+        setSyncStatus('正在获取表结构...');
         const colMap = await seatableFetchColumns(accessToken, dtableServer, dtableUuid, tableName);
 
-        setSeatableStatus('正在拉取云端数据...');
+        setSyncStatus('正在拉取云端数据...');
         const rows = await seatableFetchRows(accessToken, dtableServer, dtableUuid, tableName);
 
         if (rows.length === 0) throw new Error('表中没有数据，请检查表名是否正确');
@@ -481,15 +498,30 @@ function initCourseModule() {
             chrome.storage.local.get(['NJU_DB'], (data) => {
                 const existingDB = data.NJU_DB || {};
                 let mergedCount = 0;
-                for (const [key, comms] of Object.entries(newDB)) {
+                for (const [key, srcObj] of Object.entries(newDB)) {
+                    const newRevs = srcObj['nju_course_ratings'] || [];
                     if (existingDB[key]) {
-                        const existing = new Set(existingDB[key]);
-                        const beforeSize = existing.size;
-                        comms.forEach(c => existing.add(c));
-                        if (existing.size > beforeSize) mergedCount++;
-                        existingDB[key] = Array.from(existing);
+                        let existing = existingDB[key];
+                        // 兼容旧数组格式：转为对象格式
+                        let arr;
+                        if (Array.isArray(existing)) {
+                            arr = existing;
+                            existing = { 'nju_course_ratings': arr };
+                            existingDB[key] = existing;
+                        } else if (existing && typeof existing === 'object') {
+                            arr = existing['nju_course_ratings'] || (existing['nju_course_ratings'] = []);
+                        } else {
+                            arr = [];
+                            existing = { 'nju_course_ratings': arr };
+                            existingDB[key] = existing;
+                        }
+                        const beforeSize = arr.length;
+                        const set = new Set(arr);
+                        newRevs.forEach(c => set.add(c));
+                        existing['nju_course_ratings'] = Array.from(set);
+                        if (existing['nju_course_ratings'].length > beforeSize) mergedCount++;
                     } else {
-                        existingDB[key] = comms;
+                        existingDB[key] = srcObj;
                         mergedCount++;
                     }
                 }
@@ -504,22 +536,124 @@ function initCourseModule() {
     const SEATABLE_SERVER = 'https://table.nju.edu.cn';
     const SEATABLE_TABLE = 'opendata_export';
 
-    const seatableSyncBtn = document.getElementById('course-seatable-sync');
-    if (seatableSyncBtn) {
-        seatableSyncBtn.onclick = async () => {
-            seatableSyncBtn.disabled = true;
-            seatableSyncBtn.textContent = '同步中...';
-            setSeatableStatus('');
-            try {
+    function githubFetch(url) {
+        return new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({ action: 'fetchJson', payload: { url } }, (resp) => {
+                if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
+                if (!resp || !resp.ok) { reject(new Error(resp?.error || resp?.rawText || `HTTP ${resp?.status}`)); return; }
+                resolve(resp.data);
+            });
+        });
+    }
+
+    const GITHUB_REVIEWS_URL = 'https://raw.githubusercontent.com/Mellow-Winds/NJU-Hub/main/data/merged_ratings.json';
+    const GITHUB_AI_URL = 'https://raw.githubusercontent.com/Mellow-Winds/NJU-Hub/main/data/ai_cache.json';
+
+    // 同步评价库（并行：GitHub + SeaTable，并关系）
+    const syncReviewsBtn = document.getElementById('course-sync-reviews');
+    if (syncReviewsBtn) {
+        syncReviewsBtn.onclick = async () => {
+            syncReviewsBtn.disabled = true;
+            const origHTML = syncReviewsBtn.innerHTML;
+            syncReviewsBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" style="vertical-align:middle;margin-right:4px;"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>同步中...';
+            setSyncStatus('');
+
+            // 并行拉取 GitHub + SeaTable
+            const githubPromise = (async () => {
+                const remote = await githubFetch(GITHUB_REVIEWS_URL);
+                if (!remote || Object.keys(remote).length === 0) throw new Error('远程数据为空');
+                const data = await chrome.storage.local.get(['NJU_DB']);
+                const db = data.NJU_DB || {};
+                let merged = 0;
+                for (const [key, val] of Object.entries(remote)) {
+                    if (db[key]) {
+                        const existing = db[key];
+                        if (typeof existing === 'object' && !Array.isArray(existing) && typeof val === 'object' && !Array.isArray(val)) {
+                            for (const [src, revs] of Object.entries(val)) {
+                                if (!Array.isArray(revs)) continue;
+                                if (!existing[src]) { existing[src] = revs; merged++; }
+                                else {
+                                    const set = new Set([...existing[src], ...revs]);
+                                    if (set.size > existing[src].length) { existing[src] = Array.from(set); merged++; }
+                                }
+                            }
+                        } else if (Array.isArray(existing) && Array.isArray(val)) {
+                            const set = new Set([...existing, ...val]);
+                            if (set.size > existing.length) { db[key] = Array.from(set); merged++; }
+                        } else {
+                            db[key] = val; merged++;
+                        }
+                    } else {
+                        db[key] = val; merged++;
+                    }
+                }
+                await chrome.storage.local.set({ NJU_DB: db });
+                return { merged, total: Object.keys(remote).length };
+            })();
+
+            const seatablePromise = (async () => {
                 const result = await seatableSync({ apiToken: SEATABLE_TOKEN, serverUrl: SEATABLE_SERVER, tableName: SEATABLE_TABLE });
-                setSeatableStatus(`同步完成！合并 ${result.mergedCount} 门课程（共 ${result.totalCourses} 门），云端拉取 ${result.courseCount} 门`);
-                renderDataManager();
-            } catch (err) {
-                setSeatableStatus(`同步失败: ${err.message}`, true);
-            } finally {
-                seatableSyncBtn.disabled = false;
-                seatableSyncBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" style="vertical-align:middle;margin-right:4px;"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>立即同步';
+                return { merged: result.mergedCount || 0, total: result.courseCount || 0 };
+            })();
+
+            const [githubResult, seatableResult] = await Promise.allSettled([githubPromise, seatablePromise]);
+
+            const githubOk = githubResult.status === 'fulfilled';
+            const seatableOk = seatableResult.status === 'fulfilled';
+            const githubInfo = githubOk ? githubResult.value : null;
+            const seatableInfo = seatableOk ? seatableResult.value : null;
+
+            if (!githubOk) console.warn('[NJU-Hub] GitHub 评价库拉取失败:', githubResult.reason);
+            if (!seatableOk) console.warn('[NJU-Hub] SeaTable 同步失败:', seatableResult.reason);
+
+            if (githubOk || seatableOk) {
+                const parts = [];
+                if (githubOk) parts.push(`GitHub: ${githubInfo.total} 门课程`);
+                if (seatableOk) parts.push(`SeaTable: 合并 ${seatableInfo.merged} 门`);
+                setSyncStatus(`同步完成！${parts.join('，')}`);
+            } else {
+                setSyncStatus('同步失败：GitHub 和 SeaTable 均无法连接，请稍后重试', true);
             }
+
+            syncReviewsBtn.disabled = false;
+            syncReviewsBtn.innerHTML = origHTML;
+            renderDataManager();
+        };
+    }
+
+    // 同步AI评价库（GitHub）
+    const syncAIBtn = document.getElementById('course-sync-ai');
+    if (syncAIBtn) {
+        syncAIBtn.onclick = async () => {
+            syncAIBtn.disabled = true;
+            const origHTML = syncAIBtn.innerHTML;
+            syncAIBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" style="vertical-align:middle;margin-right:4px;"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>同步中...';
+            setSyncStatus('');
+
+            try {
+                setSyncStatus('正在从 GitHub 拉取 AI 评价库...');
+                const remote = await githubFetch(GITHUB_AI_URL);
+                if (remote && Object.keys(remote).length > 0) {
+                        const data = await chrome.storage.local.get(['NJU_AI_CACHE']);
+                        const ai = data.NJU_AI_CACHE || {};
+                        let merged = 0;
+                        for (const [key, val] of Object.entries(remote)) {
+                            if (!ai[key]) { ai[key] = val; merged++; }
+                            else { Object.assign(ai[key], val); merged++; }
+                        }
+                        await chrome.storage.local.set({ NJU_AI_CACHE: ai });
+                        setSyncStatus(`AI 评价库同步完成！${merged} 门课程`);
+                    } else {
+                        setSyncStatus('同步失败：远程数据为空', true);
+                    }
+            } catch (e) {
+                console.warn('[NJU-Hub] AI 评价库拉取失败:', e);
+                setSyncStatus(`同步失败: ${e.message}`, true);
+            }
+
+            syncAIBtn.disabled = false;
+            syncAIBtn.innerHTML = origHTML;
+            renderDataManager();
         };
     }
 

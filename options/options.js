@@ -353,13 +353,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const KEYS = [
         'common-name', 'student_id', 'login_pass',
-        'login_autofill', 'login_autologin', 'login_api_url', 'login_api_key', 'login_model',
+        'login_autofill', 'login_autologin', 'login_ai_enable', 'login_api_url', 'login_api_key', 'login_model',
         'login_extract_api_url', 'login_extract_api_key', 'login_extract_model',
         'course_major', 'course_pref', 'course_api_url', 'course_api_key', 'course_model',
         'NJU_CAMPUS', 'NJU_CONFLICT', 'NJU_PIN_FAV',
         'NJU_SCHEDULE',
         'seatable_last_sync',
         'toggle-eval', 'eval_api_url', 'eval_api_key', 'eval_model',
+        'toggle-spoc-redirect',
         'toggle-lms',
         'lms_video_remove_restrict', 'lms_video_autojump',
         'lms_dl_default_all', 'lms_dl_show_checkbox',
@@ -407,6 +408,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         setCheck('login-autofill', data.login_autofill);
         setCheck('login-autologin', data.login_autologin);
+        setCheck('login-ai-enable', data.login_ai_enable);
+        // AI 配置折叠
+        const aiToggle = document.getElementById('login-ai-enable');
+        const aiConfig = document.getElementById('login-ai-config');
+        const syncAiConfig = () => { aiConfig.style.display = aiToggle.checked ? '' : 'none'; };
+        syncAiConfig();
+        aiToggle.addEventListener('change', syncAiConfig);
         setVal('login-api-url', data.login_api_url);
         setVal('login-api-key', data.login_api_key);
         setVal('login-model', data.login_model);
@@ -423,15 +431,37 @@ document.addEventListener('DOMContentLoaded', () => {
         setVal('course-my-campus', data.NJU_CAMPUS, 'XL');
         setCheckDefault('course-conflict-check', data.NJU_CONFLICT, true);
         setCheckDefault('course-pin-fav', data.NJU_PIN_FAV, true);
+        setCheckDefault('course-use-own-ai', data.NJU_USE_OWN_AI, false);
+        // 自用AI配置折叠
+        (() => {
+            const ownAiToggle = document.getElementById('course-use-own-ai');
+            const ownAiConfig = document.getElementById('course-own-ai-config');
+            if (ownAiToggle && ownAiConfig) {
+                const syncOwnAi = () => { ownAiConfig.style.display = ownAiToggle.checked ? '' : 'none'; };
+                syncOwnAi();
+                ownAiToggle.addEventListener('change', syncOwnAi);
+            }
+        })();
 
 
         setCheckDefaultOn('toggle-eval', data['toggle-eval']);
+        setCheckDefaultOn('toggle-spoc-redirect', data['toggle-spoc-redirect']);
         // eval AI 字段已移除，保留读取以兼容旧数据（字段可选）
         setVal('eval-api-url', data.eval_api_url);
         setVal('eval-api-key', data.eval_api_key);
         setVal('eval-model', data.eval_model);
 
         setCheckDefaultOn('toggle-lms', data['toggle-lms']);
+        // LMS 子配置折叠
+        (() => {
+            const lmsToggle = document.getElementById('toggle-lms');
+            const lmsSubConfig = document.getElementById('lms-sub-config');
+            if (lmsToggle && lmsSubConfig) {
+                const syncLms = () => { lmsSubConfig.style.display = lmsToggle.checked ? '' : 'none'; };
+                syncLms();
+                lmsToggle.addEventListener('change', syncLms);
+            }
+        })();
 
         setCheckDefault('lms-video-remove-restrict', data.lms_video_remove_restrict, true);
         setCheckDefault('lms-video-autojump', data.lms_video_autojump, false);
@@ -461,6 +491,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'login_pass': document.getElementById('common-pwd').value.trim(),
             'login_autofill': document.getElementById('login-autofill').checked,
             'login_autologin': document.getElementById('login-autologin').checked,
+            'login_ai_enable': document.getElementById('login-ai-enable').checked,
             'login_api_url': document.getElementById('login-api-url').value.trim(),
             'login_api_key': document.getElementById('login-api-key').value.trim(),
             'login_model': document.getElementById('login-model').value.trim(),
@@ -475,7 +506,9 @@ document.addEventListener('DOMContentLoaded', () => {
             'NJU_CAMPUS': NjuDropdown.getById('course-my-campus')?.getValue() || 'XL',
             'NJU_CONFLICT': document.getElementById('course-conflict-check').checked,
             'NJU_PIN_FAV': document.getElementById('course-pin-fav').checked,
+            'NJU_USE_OWN_AI': document.getElementById('course-use-own-ai').checked,
             'toggle-eval': document.getElementById('toggle-eval').checked,
+            'toggle-spoc-redirect': document.getElementById('toggle-spoc-redirect').checked,
             'eval_api_url': document.getElementById('eval-api-url')?.value?.trim() || '',
             'eval_api_key': document.getElementById('eval-api-key')?.value?.trim() || '',
             'eval_model': document.getElementById('eval-model')?.value?.trim() || '',
@@ -543,7 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     <p style="margin-top:20px;"><strong style="color:#1A1B21;font-size:16px;">权限使用说明</strong></p>
                     <p><code style="background:#E8E8EF;padding:1px 6px;border-radius:4px;font-size:13px;">storage</code> — 用于在本地保存您的配置信息、课表数据和课程评价。</p>
-                    <p><code style="background:#E8E8EF;padding:1px 6px;border-radius:4px;font-size:13px;">activeTab / scripting</code> — 用于在当前标签页注入功能增强脚本（GPA查询、课表抓取、自动评教等），仅在您主动触发的页面上执行。</p>
+                    <p><code style="background:#E8E8EF;padding:1px 6px;border-radius:4px;font-size:13px;">declarativeNetRequest</code> — 用于移除向 NJU 系统发起的请求中的 Origin/Referer 头部，避免 CORS 拦截，确保自动登录和课程评价同步等功能正常运作。</p>
                     <p><code style="background:#E8E8EF;padding:1px 6px;border-radius:4px;font-size:13px;">host_permissions</code> — 用于访问南大相关系统（统一认证、教务系统、LMS、SEEC 等）以提供自动登录、课表同步、LMS 增强等核心功能，以及访问您配置的 AI API 地址以提供 AI 辅助功能。</p>
 
                     <p style="margin-top:20px;"><strong style="color:#1A1B21;font-size:16px;">您的权利</strong></p>
