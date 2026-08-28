@@ -89,7 +89,14 @@
     },
     {
       "matches": ["https://lms.nju.edu.cn/*"],
-      "js": ["scripts/lms_enhance.js"],
+      "js": [
+        "scripts/lms/lms_core.js",
+        "scripts/lms/lms_styles.js",
+        "scripts/lms/lms_utils.js",
+        "scripts/lms/lms_download.js",
+        "scripts/lms/lms_worker.js",
+        "scripts/lms/lms_main.js"
+      ],
       "run_at": "document_end"
     },
     {
