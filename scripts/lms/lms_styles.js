@@ -182,6 +182,15 @@
             .lms-cp-text { font-size: 12px; color: #888; flex-shrink: 0; white-space: nowrap; }
             .lms-course-progress.done .lms-cp-fill { background: var(--lms-green); }
             .lms-course-progress.done .lms-cp-text { color: var(--lms-green); font-weight: 600; }
+            .lms-cp-tip {
+                position: fixed; z-index: 300000; max-width: 320px; max-height: 320px;
+                overflow-y: auto; padding: 10px 14px; border-radius: 10px;
+                background: var(--lms-panel-bg); backdrop-filter: blur(var(--lms-blur)); -webkit-backdrop-filter: blur(var(--lms-blur));
+                border: 1px solid rgba(255,255,255,0.6); box-shadow: var(--lms-shadow);
+                pointer-events: none; font-size: 12px; line-height: 1.6;
+            }
+            .lms-cp-tip-title { font-weight: 700; color: #333; margin-bottom: 6px; }
+            .lms-cp-tip-item { color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 0; }
         `;
         const style = document.createElement('style');
         style.textContent = css;

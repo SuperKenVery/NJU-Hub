@@ -45,13 +45,18 @@
     });
     let total = 0;
     let completed = 0;
+    const unfinished = [];
     (actsData.activities || []).forEach((act) => {
       const id = act.id ?? act.activity_id;
       if (id == null) return;
       total += 1;
-      if (done.has(id)) completed += 1;
+      if (done.has(id)) {
+        completed += 1;
+      } else {
+        unfinished.push(act.title || act.name || `章节 ${id}`);
+      }
     });
-    return { total, completed };
+    return { total, completed, unfinished };
   }
 
   function renderProgressEl(card) {
@@ -69,6 +74,44 @@
     return wrap;
   }
 
+  // hover 气泡：展示未完成章节列表，跟随鼠标、超出屏幕自动翻转
+  function attachHoverTip(el, getItems) {
+    let tip = null;
+    const place = (e) => {
+      if (!tip) return;
+      const pad = 14;
+      const rect = tip.getBoundingClientRect();
+      let x = e.clientX + pad;
+      let y = e.clientY + pad;
+      if (x + rect.width > window.innerWidth - 8) x = e.clientX - rect.width - pad;
+      if (y + rect.height > window.innerHeight - 8) y = e.clientY - rect.height - pad;
+      tip.style.left = `${Math.max(8, x)}px`;
+      tip.style.top = `${Math.max(8, y)}px`;
+    };
+    const show = (e) => {
+      const items = getItems();
+      if (!items.length) return;
+      hide();
+      tip = document.createElement("div");
+      tip.className = "lms-cp-tip";
+      tip.innerHTML = `
+                <div class="lms-cp-tip-title">未完成 ${items.length} 个章节</div>
+                ${items.map((n) => `<div class="lms-cp-tip-item">${escapeHtml(n)}</div>`).join("")}
+            `;
+      document.body.appendChild(tip);
+      place(e);
+    };
+    const hide = () => {
+      if (tip) {
+        tip.remove();
+        tip = null;
+      }
+    };
+    el.addEventListener("mouseenter", show);
+    el.addEventListener("mousemove", place);
+    el.addEventListener("mouseleave", hide);
+  }
+
   async function processCard(card) {
     const a = card.querySelector("a.course-name[href*='/course/']");
     if (!a) return;
@@ -77,15 +120,15 @@
     const el = renderProgressEl(card);
     if (!el) return;
     try {
-      const { total, completed } = await fetchCourseProgress(courseId);
+      const { total, completed, unfinished } = await fetchCourseProgress(courseId);
       const pct = total ? Math.round((completed / total) * 100) : 0;
       el.querySelector(".lms-cp-fill").style.width = `${pct}%`;
       const text = el.querySelector(".lms-cp-text");
       text.textContent = total
         ? `${completed}/${total} 已完成`
         : "暂无章节";
-      el.title = `完成度 ${pct}%`;
       if (total > 0 && completed >= total) el.classList.add("done");
+      attachHoverTip(el, () => unfinished);
     } catch (e) {
       el.querySelector(".lms-cp-text").textContent = "进度获取失败";
       console.warn(`[NJU-Hub] 课程 ${courseId} 进度获取失败:`, e);
