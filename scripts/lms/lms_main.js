@@ -28,6 +28,7 @@
     resolveCurrentActivityFile,
     renderWatchBall,
     startWatchFlow,
+    startCourseProgress,
   } = window.__LMS__;
 
   // 1. 读取插件的总开关，如果关闭则不注入任何代码
@@ -53,6 +54,7 @@
 
     renderDownloadBall(fetchResources);
     renderWatchBall(startWatchFlow);
+    startCourseProgress();
     startMonitor();
     startAutoJump();
 

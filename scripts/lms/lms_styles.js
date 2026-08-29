@@ -174,6 +174,14 @@
             .color-dot.selected { border-color: #333; transform: scale(1.2); }
             .lms-input-text { border: 1px solid #ddd; padding: 0 12px; border-radius: 8px; outline: none; font-size: 14px; width: 100%; height: 36px; box-sizing: border-box; background: rgba(255,255,255,0.8); transition: border 0.2s; }
             .lms-input-text:focus { border-color: var(--lms-main); background: white; }
+
+            /* 课程列表完成进度 */
+            .lms-course-progress { display: flex; align-items: center; gap: 10px; padding: 10px 0 2px; }
+            .lms-cp-bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(0,0,0,0.08); overflow: hidden; }
+            .lms-cp-fill { height: 100%; width: 0; border-radius: 3px; background: var(--lms-main); transition: width 0.6s var(--lms-ease); }
+            .lms-cp-text { font-size: 12px; color: #888; flex-shrink: 0; white-space: nowrap; }
+            .lms-course-progress.done .lms-cp-fill { background: var(--lms-green); }
+            .lms-course-progress.done .lms-cp-text { color: var(--lms-green); font-weight: 600; }
         `;
         const style = document.createElement('style');
         style.textContent = css;

@@ -95,6 +95,7 @@
         "scripts/lms/lms_utils.js",
         "scripts/lms/lms_download.js",
         "scripts/lms/lms_watch.js",
+        "scripts/lms/lms_progress.js",
         "scripts/lms/lms_worker.js",
         "scripts/lms/lms_main.js"
       ],
