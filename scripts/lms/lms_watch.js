@@ -34,6 +34,14 @@
     return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
   }
 
+  /**
+   * 上报活动进度。
+   * - online_video（completion_criterion_key === "completeness"）：body 为 {start, end} 秒区间片段
+   * - web_link（completion_criterion_key === "view"）：body 为空对象 {}，提交一次即视为已读
+   * @param {number|string} activityId
+   * @param {VideoProgressBody | {}} progress
+   * @returns {Promise<string>} 响应 body 文本
+   */
   async function logActivityRead(activityId, progress) {
     const response = await fetch(
       `/api/course/activities-read/${encodeURIComponent(activityId)}`,
@@ -53,8 +61,48 @@
     return body;
   }
 
+  /**
+   * POST /api/course/activities-read/:id 的请求体（仅 online_video 类型）
+   * @typedef {Object} VideoProgressBody
+   * @property {number} start 片段起始秒
+   * @property {number} end 片段结束秒
+   */
+
+  /**
+   * 单个活动（GET /api/courses/:id/activities?sub_course_id=0 的 activities[] 元素）。
+   * 只声明我们用到的字段。
+   * @typedef {Object} Activity
+   * @property {number} [id] 活动 id
+   * @property {string} type 活动类型："online_video" | "web_link" | ...
+   * @property {string} completion_criterion_key 完成判定：online_video 为 "completeness"，web_link 为 "view"
+   * @property {string} [title] 活动标题
+   * @property {string} [name] 活动标题（备用字段名）
+   * @property {Array<{videos?: Array<{duration?: number|string}>}>} [uploads]
+   *   online_video 时只有一个元素；videos 是不同清晰度，duration 一致，取第一个即可
+   */
+
+  /**
+   * GET /api/courses/:id/activities 响应
+   * @typedef {Object} ActivitiesResponse
+   * @property {Activity[]} [activities]
+   */
+
+  /**
+   * GET /api/course/:id/activity-reads-for-user 的 activity_reads[] 元素
+   * @typedef {Object} ActivityRead
+   * @property {number} [activity_id]
+   * @property {string} [completeness] "full" 表示已完成
+   */
+
+  /**
+   * GET /api/course/:id/activity-reads-for-user 响应
+   * @typedef {Object} ActivityReadsResponse
+   * @property {ActivityRead[]} [activity_reads]
+   */
+
   // 章节时长在 activities[i].uploads[0].videos[0].duration，
   // uploads 只有一个元素；videos 是不同清晰度，duration 一致，取第一个即可
+  /** @param {Activity} act @returns {number} */
   function extractDuration(act) {
       const video = act.uploads?.[0]?.videos?.[0];
       const n = Number(video?.duration);
@@ -63,6 +111,7 @@
   }
 
   // 拉取观看记录，返回已完成（completeness === "full"）的 activity_id 集合
+  /** @param {string|number} courseId @returns {Promise<Set<number>>} */
   async function fetchCompletedIds(courseId) {
     const res = await fetch(
       `/api/course/${courseId}/activity-reads-for-user`,
@@ -71,6 +120,7 @@
       },
     );
     if (!res.ok) throw new Error(`观看记录请求失败 (${res.status})`);
+    /** @type {ActivityReadsResponse} */
     const data = await res.json();
     const done = new Set();
     (data.activity_reads || []).forEach((r) => {
@@ -79,6 +129,10 @@
     return done;
   }
 
+  /**
+   * @param {string|number} courseId
+   * @returns {Promise<{chapters: Chapter[], skipped: number, completedCount: number}>}
+   */
   async function fetchChapters(courseId) {
     const res = await fetch(
       `/api/courses/${courseId}/activities?sub_course_id=0`,
@@ -87,28 +141,40 @@
       },
     );
     if (!res.ok) throw new Error(`章节列表请求失败 (${res.status})`);
+    /** @type {ActivitiesResponse} */
     const data = await res.json();
     const completed = await fetchCompletedIds(courseId);
     const chapters = [];
     let skipped = 0;
     let completedCount = 0;
     (data.activities || []).forEach((act) => {
-      const id = act.id ?? act.activity_id;
+      const id = act.id;
       if (id == null) return;
       if (completed.has(id)) {
         completedCount += 1;
         return;
       }
-      const duration = extractDuration(act);
-      if (!duration) {
-        skipped += 1;
-        return;
+      if (act.type === "web_link") {
+        // view 类活动：提交一次空对象即完成，无需时长
+        chapters.push({
+          id,
+          name: act.name || act.title || `章节 ${id}`,
+          kind: "link",
+        });
+      } else if (act.type === "online_video") {
+        const duration = extractDuration(act);
+        if (!duration) {
+          skipped += 1;
+          return;
+        }
+        chapters.push({
+          id,
+          name: act.name || act.title || `章节 ${id}`,
+          duration,
+          kind: "video",
+        });
       }
-      chapters.push({
-        id,
-        name: act.name || act.title || `章节 ${id}`,
-        duration,
-      });
+
     });
     return { chapters, skipped, completedCount };
   }
@@ -139,7 +205,7 @@
                         <div class="lms-dl-item" data-idx="${i}">
                             <input type="checkbox" class="lms-ios-checkbox" id="w-${i}" checked>
                             <label class="lms-dl-name">${escapeHtml(c.name)}</label>
-                            <span class="lms-watch-duration">${formatDuration(c.duration)}</span>
+                            <span class="lms-watch-duration">${c.kind === "link" ? "链接" : formatDuration(c.duration)}</span>
                         </div>
                     `,
                       )
@@ -212,7 +278,7 @@
                         (c) => `
                         <div class="lms-watch-row" data-id="${escapeHtml(String(c.id))}">
                             <span class="lms-watch-name">${escapeHtml(c.name)}</span>
-                            <span class="lms-watch-status">0:00 / ${formatDuration(c.duration)}</span>
+                            <span class="lms-watch-status">${c.kind === "link" ? "网页链接" : `0:00 / ${formatDuration(c.duration)}`}</span>
                         </div>
                     `,
                       )
@@ -266,7 +332,24 @@
     };
   }
 
-  // 单个章节：顺序提交 [0, duration] 的片段，片段间隔 = 片段时长 / 2（2 倍速）
+  /**
+   * 待刷的章节项
+   * @typedef {Object} ChapterBase
+   * @property {number} id 活动 id
+   * @property {string} name 显示名称
+   */
+
+  /** 视频章节：按片段上报进度 */
+  /** @typedef {ChapterBase & {kind: "video", duration: number}} VideoChapter */
+
+  /** 网页链接章节：提交一次空对象即完成，无时长 */
+  /** @typedef {ChapterBase & {kind: "link"}} LinkChapter */
+
+  /** @typedef {VideoChapter | LinkChapter} Chapter */
+
+  // 单个章节：video 顺序提交 [0, duration] 的片段，片段间隔 = 片段时长 / 2（2 倍速）；
+  // link 只提交一次空对象 {}
+  /** @param {Chapter} chapter @param {Map<string, HTMLElement>} rows */
   async function watchChapter(chapter, rows) {
     const row = rows.get(String(chapter.id));
     const statusEl = row && row.querySelector(".lms-watch-status");
@@ -283,6 +366,12 @@
     };
 
     try {
+      if (chapter.kind === "link") {
+        await logActivityRead(chapter.id, {});
+        setProgress(1);
+        setStatus("完成", "done");
+        return "done";
+      }
       let t = 0;
       while (t < chapter.duration) {
         if (WATCH_STATE.stop) {
