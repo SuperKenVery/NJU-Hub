@@ -81,6 +81,7 @@
 
             #lms-cfg-cont { bottom: 30px; left: 30px; }
             #lms-dl-ball-cont { bottom: 30px; right: 30px; }
+            #lms-watch-ball-cont { bottom: 90px; right: 30px; }
             .lms-ball-white { background: white; border: 1px solid rgba(0,0,0,0.1); color: #333; font-size: 22px; }
             .lms-ball-green { background: var(--lms-green); font-size: 20px; }
             .lms-ball-main { background: var(--lms-main); }
@@ -157,6 +158,15 @@
             .lms-dl-item.no-cb { padding-left: 24px; }
 
             .lms-dl-name { font-size: 14px; color: #333; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; margin-left: 12px; }
+            .lms-watch-duration { font-size: 12px; color: #999; flex-shrink: 0; margin-left: 10px; }
+            .lms-watch-row { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; border-bottom: 1px solid rgba(0,0,0,0.04); font-size: 13px; }
+            .lms-watch-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: var(--watch-progress, 0%); background: rgba(64, 150, 255, 0.12); transition: width 0.4s ease; pointer-events: none; }
+            .lms-watch-row > * { position: relative; }
+            .lms-watch-row.done::before { width: 100%; background: rgba(82, 196, 26, 0.12); }
+            .lms-watch-name { color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 12px; }
+            .lms-watch-status { color: #888; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+            .lms-watch-row.done .lms-watch-status { color: var(--lms-green); font-weight: 700; }
+            .lms-watch-row.failed .lms-watch-status { color: #ff4d4f; }
             .lms-file-tag { font-size: 10px; font-weight: 800; color: white; padding: 3px 6px; border-radius: 6px; text-transform: uppercase; min-width: 36px; text-align: center; margin-left: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); flex-shrink: 0; }
             .tag-pdf { background: #ff4d4f; } .tag-doc { background: #40a9ff; } .tag-ppt { background: #fa8c16; } .tag-xls { background: #52c41a; } .tag-code { background: #722ed1; } .tag-file { background: #bfbfbf; }
 

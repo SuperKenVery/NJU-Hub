@@ -26,6 +26,8 @@
     initWorker,
     waitFor,
     resolveCurrentActivityFile,
+    renderWatchBall,
+    startWatchFlow,
   } = window.__LMS__;
 
   // 1. 读取插件的总开关，如果关闭则不注入任何代码
@@ -50,6 +52,7 @@
     updateThemeVariables(themeColor);
 
     renderDownloadBall(fetchResources);
+    renderWatchBall(startWatchFlow);
     startMonitor();
     startAutoJump();
 
